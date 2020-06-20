@@ -1,0 +1,204 @@
+#! /bin/bash
+
+# https://aur.archlinux.org/cgit/aur.git/tree/PKGBUILD?h=wine-staging-git
+
+ACCEL=2
+
+
+function wrong_usage {
+    echo "usage: wine-build VERSION"
+    echo "                  [--staging] [--std]"
+    echo "                  [--64] [--32]"
+    exit 1
+}
+
+
+
+function help_message {
+    echo "usage: wine-build VERSION"
+    echo "                  [--staging] [--std]"
+    echo "                  [--64] [--32]"
+    echo ""
+    echo -e "\e[34mpositional arguments:\e[0m"
+    echo "  VERSION          wine version to build"
+    echo " "
+    echo -e "\e[34mwine variation arguments:\e[0m"
+    echo "  --staging        build ONLY wine-staging for the choosed version."
+    echo "  --std            build ONLY 'normal' wine"
+    echo "     (by default both 'staging' and 'normal' will be built)"
+    echo " "
+    echo -e "\e[34mwine arch arguments:\e[0m"
+    echo "  --32             build ONLY 32 bit arch"
+    echo "  --64             build ONLY 64 bit arch"
+    echo "     (by default both '32' and '64' bit will be built)"
+    echo " "
+    exit 1
+}
+
+
+
+function prepare_staging_src {
+   mkdir $HOME/wine-games/staging
+   cd git-wine
+   git checkout "wine-$1"
+   git archive --format=tar -o ../staging.tar "wine-$1"
+   cd ..
+   tar xvf "staging.tar" --directory "./staging"
+   cd git-wine-staging
+   git checkout "v$1"
+   cd patches
+   ./patchinstall.sh DESTDIR="$HOME/wine-games/staging" --all
+   cd "$HOME/wine-games"
+   rm staging.tar
+   patch "$HOME/wine-games/staging/dlls/appwiz.cpl/addons.c" < addons.c.patch 
+}
+
+
+
+function prepare_std_src {
+   mkdir $HOME/wine-games/std
+   cd git-wine
+   git checkout "wine-$1"
+   git archive --format=tar -o ../std.tar "wine-$1"
+   cd ..
+   tar xvf "std.tar" --directory "./std"
+   rm std.tar
+   patch "$HOME/wine-games/std/dlls/appwiz.cpl/addons.c" < addons.c.patch 
+}
+
+
+
+
+a32=1
+a64=1
+BUILD_STAGING=1
+BUILD_STD=1
+
+while (( "$#" ))
+do
+   if [[ "$1" == "--help" ]]; then
+      help_message
+   elif [[ "$1" == "-h" ]]; then
+      help_message
+   elif [[ "$1" == "-?" ]]; then
+      help_message
+   elif [[ "$1" == "--32" ]]; then
+      a32=1
+      a64=0
+   elif [[ "$1" == "--64" ]]; then
+      a32=0
+      a64=1
+   elif [[ "$1" == "--staging" ]]; then
+      BUILD_STAGING=1
+      BUILD_STD=0
+   elif [[ "$1" == "--std" ]]; then
+      BUILD_STAGING=0
+      BUILD_STD=1
+   else
+      wine_candidate="$1"
+   fi
+   shift
+done
+
+if [[ -z "$wine_candidate" ]]; then
+   wrong_usage
+fi
+
+
+wine_is_valid=$("./check-wine-version" "$wine_candidate")
+
+if [[ "$wine_is_valid" == "0" ]]; then
+   echo "usage: wine-build VERSION"
+   echo "                  [--staging] [--std]"
+   echo "                  [--64] [--32]"
+   echo " "
+   echo -e "\e[31mError: Unvalid VERSION\e[0m"
+   echo "all available wine VERSIONs are listed at \"versions.txt\""
+   exit 1
+fi
+
+
+# ----------------------------------------------------------------------
+#  starting build
+# ----------------------------------------------------------------------
+
+
+if [ "$BUILD_STAGING" -eq 1 ]; then
+   prepare_staging_src "${wine_candidate}"
+   if [ $a64 -eq 1 ]; then
+      # 64bit wine
+      mkdir -p "$HOME/wine-games/64/${wine_candidate}-staging"
+      mkdir "$HOME/wine64s"
+      cd "$HOME/wine64s"
+      "$HOME/wine-games/staging/configure" --prefix="$HOME/wine-games/64/${wine_candidate}-staging" --enable-win64
+      make -j $ACCEL
+      make install
+      mkdir "$HOME/wine32s"
+      cd "$HOME/wine32s"
+      "$HOME/wine-games/staging/configure" --prefix="$HOME/wine-games/64/${wine_candidate}-staging" --with-wine64="$HOME/wine64s"
+      make -j $ACCEL
+      make install
+      cd "$HOME/wine-games"
+      rm -rf "$HOME/wine64s"
+      rm -rf "$HOME/wine32s"
+   fi
+   
+   if [ $a32 -eq 1 ]; then
+      mkdir -p "$HOME/wine-games/32/${wine_candidate}-staging"
+      mkdir "$HOME/wine32s"
+      cd "$HOME/wine32s"
+      "$HOME/wine-games/staging/configure" --prefix="$HOME/wine-games/32/${wine_candidate}-staging"
+      make -j $ACCEL
+      make install
+      cd "$HOME/wine-games"
+      rm -rf "$HOME/wine32s"
+   fi
+fi
+
+
+
+
+
+if [ "$BUILD_STD" -eq 1 ]; then
+   prepare_std_src "${wine_candidate}"
+   if [ $a64 -eq 1 ]; then
+      # 64bit wine
+      mkdir -p "$HOME/wine-games/64/${wine_candidate}"
+      mkdir "$HOME/wine64s"
+      cd "$HOME/wine64s"
+      "$HOME/wine-games/std/configure" --prefix="$HOME/wine-games/64/${wine_candidate}" --enable-win64
+      make -j $ACCEL
+      make install
+      mkdir "$HOME/wine32s"
+      cd "$HOME/wine32s"
+      "$HOME/wine-games/std/configure" --prefix="$HOME/wine-games/64/${wine_candidate}" --with-wine64="$HOME/wine64s"
+      make -j $ACCEL
+      make install
+      cd "$HOME/wine-games"
+      rm -rf "$HOME/wine64s"
+      rm -rf "$HOME/wine32s"
+   fi
+   
+   if [ $a32 -eq 1 ]; then
+      mkdir -p "$HOME/wine-games/32/${wine_candidate}"
+      mkdir "$HOME/wine32s"
+      cd "$HOME/wine32s"
+      "$HOME/wine-games/std/configure" --prefix="$HOME/wine-games/32/${wine_candidate}"
+      make -j $ACCEL
+      make install
+      cd "$HOME/wine-games"
+      rm -rf "$HOME/wine32s"
+   fi
+fi
+
+
+
+
+if [[ -d "$HOME/wine-games/std" ]]; then
+   rm -rf "$HOME/wine-games/std"
+fi
+
+if [[ -d "$HOME/wine-games/staging" ]]; then
+   rm -rf "$HOME/wine-games/staging"
+fi
+

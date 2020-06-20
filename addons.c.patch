@@ -1,0 +1,11 @@
+--- addons.c	2019-09-13 22:32:49.000000000 +0200
++++ addons_new.c	2019-09-19 00:24:24.951316763 +0200
+@@ -324,6 +324,8 @@
+         ret = install_from_unix_file("/usr/share/wine/", addon->subdir_name, addon->file_name);
+     if (ret == INSTALL_NEXT)
+         ret = install_from_unix_file("/opt/wine/", addon->subdir_name, addon->file_name);
++    if (ret == INSTALL_NEXT && strcmp(getenv("WINETOOLS_ROOT"), "") != 0)
++        ret = install_from_unix_file(getenv("WINETOOLS_ROOT"), addon->subdir_name, addon->file_name);
+     return ret;
+ }
+ 

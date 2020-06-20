@@ -1,0 +1,19 @@
+#! /usr/bin/env python3
+
+import argparse
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('wine_version', help='wine version to check')
+args = parser.parse_args()
+
+
+with open('versions.txt', 'r') as fi:
+    valid_versions = fi.read()
+
+valid_versions = valid_versions.split('\n')
+
+if args.wine_version in valid_versions:
+    print(1)
+else:
+    print(0)

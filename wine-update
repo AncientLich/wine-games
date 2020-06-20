@@ -1,0 +1,73 @@
+#! /bin/bash
+
+CWD=$(pwd)
+
+
+REQUIREMENTS=('python3' 'git' 'sed' 'wget' 'chmod' 'tar')
+for r in "${REQUIREMENTS[@]}"
+do
+   if [ -z $(which "$r") ]; then
+      echo "\"${r}\" is required. Please install \"${r}\" in your system. Exit 1"
+      exit 1
+   fi
+done
+
+
+if [[ ! -d "32" ]]; then
+   mkdir 32
+fi
+
+if [[ ! -d "64" ]]; then
+   mkdir 64
+fi
+
+
+
+echo -e "\e[34m1/4 - Updating wine... \e[0m"
+
+if [[ ! -d "git-wine" ]]; then
+   git clone "git://source.winehq.org/git/wine.git"
+   mv wine git-wine
+else
+   cd git-wine
+   git fetch origin
+   git checkout master
+   git merge origin/master
+   cd ..
+fi
+
+echo -e "\e[34m2/4 - Updating wine-staging... \e[0m"
+
+if [[ ! -d "git-wine-staging" ]]; then
+   git clone "https://github.com/wine-staging/wine-staging.git"
+   mv wine-staging git-wine-staging
+else
+   cd git-wine-staging
+   git fetch origin
+   git checkout master
+   git merge origin/master
+   cd ..
+fi
+
+
+echo -e "\e[34m3/4 - Collecting wine versions... \e[0m"
+
+cd git-wine
+../get-lastest-wine-versions --wine "wine" --file "../versions.txt"
+cd ..
+cd git-wine-staging
+../get-lastest-wine-versions --wine "staging" --file "../versions.txt"
+cd ..
+
+
+echo -e "\e[34m4/4 - Updating winetricks... \e[0m"
+
+if [[ -f "./winetricks" ]]; then
+   rm "winetricks"
+fi
+
+wget "https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks"
+chmod +x winetricks
+
+echo -e "\e[32mUpdate finished. \e[0m"
+

@@ -1,0 +1,111 @@
+#! /usr/bin/env python3
+
+import os
+import subprocess
+import re
+import argparse
+
+
+def reg(m, register):
+    major = int(m.group(1))
+    minor = int(m.group(2))
+    if major not in register:
+        register[major] = []
+    third = 0
+    if m.group(3) is not None:
+        third = int(m.group(3))
+    elif m.group(4) is not None:
+        third = int(m.group(4)) - 2500
+    tup = (major, minor, third)
+    register[major].append(tup)
+
+
+
+def single_version_str(value):
+    x, y, z = value
+    if z < 0:
+        z = z + 2500
+        return '{}.{}-rc{}'.format(x, y, z)
+    elif z == 0:
+        return '{}.{}'.format(x, y)
+    return '{}.{}.{}'.format(x, y, z)
+
+
+
+# used in 'wine'
+def write_versions(filename, register):
+    to_write = []
+    for key, value in register.items():
+        # tmp = sorted(value)
+        # xstr = single_version_str(tmp[-1])
+        # tup = (key, xstr)
+        # to_write.append(tup)
+        for v in sorted(value):
+            to_write.append(single_version_str(v))
+    with open(filename, 'w', encoding='utf-8') as fo:
+        for elem in to_write:
+            print(elem, file=fo)
+
+
+
+# used in 'staging'
+def check_versions(filename, register):
+    to_check = []
+    for key, value in register.items():
+        tmp = sorted(value)
+        xstr = single_version_str(tmp[-1])
+        to_check.append(xstr)
+    to_check = to_check[-1]
+    last_version = []
+    with open(filename, 'r') as fi:
+        for xline in fi:
+            xline = xline.strip('\n')
+            m = re.match(r'\s*$', xline)
+            if not m:
+                last_version.append(xline)
+    last_version = last_version[-1]
+    if to_check != last_version:
+        sed = 's,{},,'.format(last_version)
+        subprocess.call(['sed', '-i', sed, filename])
+
+
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--wine', help='valid values are "wine" or "staging"')
+parser.add_argument('--file', help='path for filename')
+args = parser.parse_args()
+
+
+if args.wine == 'wine':
+    rx = re.compile(r'wine-(\d+)\.(\d+)(?:\.(\d+)|\-rc(\d+))?')
+    # group1: major version
+    # group2: minor version
+    # [ group3: optional: "patch" version ]
+    # [ group4: optional: release candidate version ]
+    # note: group3 and group4 are mutually exclusive. It is possible 
+    # that a version contains only minor and major version (group1 and group2)
+elif args.wine == 'staging':
+    rx = re.compile(r'v(\d+)\.(\d+)(?:\.(\d+)|\-rc(\d+))?')
+    # see notes for 'wine'. The regexp works the same way
+else:
+    raise ValueError('"wine" parameter must be either "wine" or "staging"')
+
+
+
+data = subprocess.check_output(['git', 'tag']).decode('utf-8')
+data = data.split('\n')
+
+version_register = {}
+
+
+for d in data:
+    m = re.match(rx, d)
+    if m:
+        reg(m, version_register)
+
+
+if args.wine == 'wine':
+    write_versions(args.file, version_register)
+else:
+    check_versions(args.file, version_register)
